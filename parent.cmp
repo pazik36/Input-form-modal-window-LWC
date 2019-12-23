@@ -1,0 +1,19 @@
+<template>
+    <lightning-card title="Data Access Request" icon-name="custom:custom66">
+        <lightning-layout>
+            <lightning-layout-item padding="around-small" flexibility="auto" style="padding-top: 36px;">
+                <lightning-button label="Refresh Parent-Child Relationship Table" onclick={handleLoad}></lightning-button>
+            </lightning-layout-item>
+            <lightning-layout-item padding="around-small" flexibility="auto" style="padding-top: 36px; padding-right: 400px;">
+                <lightning-button label="New" variant="brand" onclick={openmodal}></lightning-button>
+            </lightning-layout-item>
+        </lightning-layout>
+        <lightning-datatable data={data} columns={columns} hide-checkbox-column='true' show-row-number-column row-number-offset={rowOffset} key-field="Id" onrowaction={handleRowActions}>
+        </lightning-datatable>
+        <div class="slds-theme_default">
+            <template if:true={openmodel}>
+                <c-modal-parent-child-relationship selected-data={selectRecord} onclose={closeModal}></c-modal-parent-child-relationship>
+            </template>
+        </div>
+    </lightning-card>
+</template>
