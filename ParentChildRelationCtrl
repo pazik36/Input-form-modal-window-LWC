@@ -1,0 +1,386 @@
+public class ParentChildRelationCtrl {
+
+    @AuraEnabled
+    public static Boolean insertParentChildRel() {
+        
+        Boolean checkInsert = null;
+        List<bhdata__Parent_Child_Relationship__c> relationObjList = [SELECT Id FROM bhdata__Parent_Child_Relationship__c];
+        delete [SELECT Id FROM bhdata__Parent_Child_Relationship__c];
+        relationObjList = [SELECT Id FROM bhdata__Parent_Child_Relationship__c];
+        System.debug('relationObjList ' + relationObjList.size());
+        
+        /*List<bhdata__Inventory__c> invList = [SELECT Id FROM bhdata__Inventory__c];
+        delete [SELECT Id FROM bhdata__Inventory__c];
+        invList = [SELECT Id FROM bhdata__Inventory__c];
+        System.debug('existObjInventoryList ' + invList);*/
+        
+        List<Object_Inventory__mdt> inventoryList = [
+            SELECT Salesforce_Object__r.Label,Salesforce_Object__r.QualifiedApiName, QualifiedApiName,
+                Include_in_SOSL__c,Record_Identifier__c,Record_Identifier__r.QualifiedApiName,Active__c
+            FROM Object_Inventory__mdt
+        ];
+        /*System.debug('inventoryList = ' + JSON.serialize(inventoryList));
+        
+        List<bhdata__Inventory__c> newInventoryList = new List<bhdata__Inventory__c>();
+        bhdata__Inventory__c CustomObjectInventory;
+        for (Object_Inventory__mdt inventory: inventoryList) {
+            CustomObjectInventory = new bhdata__Inventory__c();
+            CustomObjectInventory.bhdata__Label__c = inventory.Salesforce_Object__r.Label;
+            CustomObjectInventory.bhdata__Inventory_Name__c = inventory.Salesforce_Object__r.Label;
+            CustomObjectInventory.bhdata__ObjectApiName__c = inventory.Salesforce_Object__r.QualifiedApiName;
+            CustomObjectInventory.bhdata__Include_in_SOSL__c = inventory.Include_in_SOSL__c;
+            CustomObjectInventory.bhdata__Active__c =  inventory.Active__c;
+            CustomObjectInventory.bhdata__Record_Identifier__c = inventory.Record_Identifier__c;
+            CustomObjectInventory.bhdata__RecordIdentifierApiName__c = inventory.Record_Identifier__r.QualifiedApiName; 
+            newInventoryList.add(CustomObjectInventory);
+
+        }
+        insert newInventoryList;
+        List<bhdata__Inventory__c> existObjInventoryList = [
+            SELECT bhdata__Label__c,bhdata__ObjectApiName__c,bhdata__Include_in_SOSL__c,
+                   bhdata__Active__c,bhdata__Record_Identifier__c,bhdata__RecordIdentifierApiName__c 
+            FROM bhdata__Inventory__c
+        ];
+        System.debug('existObjInventoryList ' + existObjInventoryList);
+        System.debug('existObjInventoryList ' + JSON.serialize(existObjInventoryList));*/
+
+        
+        Set<String> inlcudeInSosqlObjects = new Set<String>();
+        Set<String> activeNonSoslObjects = new Set<String>();
+        Set<String> activeOrInSoslObjects = new Set<String>();
+        Boolean inludedInSosl;
+        String invenotryItemApiName;
+        for (Object_Inventory__mdt inventoryItem :inventoryList) {
+            
+            inludedInSosl = inventoryItem.Include_in_SOSL__c == true;
+            invenotryItemApiName = inventoryItem.Salesforce_Object__r.QualifiedApiName;
+            if (inludedInSosl == true) {
+                inlcudeInSosqlObjects.add(invenotryItemApiName);
+            }
+            if (inludedInSosl == false && inventoryItem.Active__c == true) {
+                activeNonSoslObjects.add(invenotryItemApiName);
+            }
+            if (inventoryItem.Active__c == true || inludedInSosl == true) {
+                activeOrInSoslObjects.add(invenotryItemApiName);
+            }
+        }
+        // parentChildRelationships variable is for storing the final result.
+        List<bhdata__Parent_Child_Relationship__c> parentChildRelationships = new List<bhdata__Parent_Child_Relationship__c>();
+        List<String> parentsToProcess = new List<String>(inlcudeInSosqlObjects);
+        List<Schema.ChildRelationship> aChildRelationshipList;
+        // child relations for these parent-records are already created. And to exclude recurtion and duplicate Relations we need
+        Set<String> processedParents = new Set<String>(); // to check what Parents was already processed and which not.
+        bhdata__Parent_Child_Relationship__c parentChildReltionship;
+        Boolean inInventory;
+        String childApiName;
+        String parentApiName;
+
+        for (Integer i = 0; i < parentsToProcess.size(); i++) {
+            parentApiName = parentsToProcess[i];
+            if (!processedParents.contains(parentApiName)) { // to prevent recursion. This parent already has child realtions.
+                processedParents.add(parentApiName);
+
+                aChildRelationshipList = Schema.getGlobalDescribe().get(parentApiName).getDescribe().getChildRelationships();
+                for (Schema.ChildRelationship relationshipInfo :aChildRelationshipList) {
+
+                    childApiName = String.valueOf(relationshipInfo.ChildSobject);
+                    inInventory = activeOrInSoslObjects.contains(childApiName);
+                    if (inInventory) {
+                        parentChildReltionship = new bhdata__Parent_Child_Relationship__c();
+                        parentChildReltionship.bhdata__Parent_Object__c = parentApiName;
+                        parentChildReltionship.bhdata__Child_Object__c = childApiName;
+                        parentChildReltionship.bhdata__Lookup_To_Parent__c = String.valueOf(relationshipInfo.field);
+                        parentChildReltionship.Name = parentApiName + '  TO  ' + childApiName;
+                        
+                        parentChildRelationships.add(parentChildReltionship); // one more relation is ready.
+                        parentsToProcess.add(childApiName); // !! add childs to be processed to take their childs and so on...
+                    }
+                }
+            } ///// if object is already a Parent then skip it.
+        }
+
+        insert parentChildRelationships;
+        List<bhdata__Parent_Child_Relationship__c> existingRelationships = [
+            SELECT bhdata__Parent_Object__c,
+                   bhdata__Child_Object__c,
+                   bhdata__Lookup_To_Parent__c
+            FROM bhdata__Parent_Child_Relationship__c
+        ];
+        if (parentChildRelationships.size() == existingRelationships.size()) {
+            checkInsert = true;
+        } else {
+            checkInsert = false;
+        }
+
+        Map<String,List<String>> parentToChilds = new Map<String,List<String>>();
+        for (bhdata__Parent_Child_Relationship__c relationship :existingRelationships) {
+            
+            if (parentToChilds.containsKey(relationship.bhdata__Parent_Object__c)) {
+                parentToChilds.get(relationship.bhdata__Parent_Object__c).add(relationship.bhdata__Child_Object__c 
+                    + '~' + relationship.bhdata__Lookup_To_Parent__c);
+            } else {
+                parentToChilds.put(relationship.bhdata__Parent_Object__c, new List<String>{relationship.bhdata__Child_Object__c 
+                    + '~' + relationship.bhdata__Lookup_To_Parent__c});
+            }
+        }
+        return checkInsert;
+
+    }
+
+ 
+    @AuraEnabled (cacheable=true)
+    public static List<bhdata__Inventory__c> getAllInventory() {
+        return [SELECT bhdata__Label__c,bhdata__ObjectApiName__c,bhdata__Include_in_SOSL__c,
+                       bhdata__Active__c,bhdata__Record_Identifier__c,bhdata__RecordIdentifierApiName__c 
+                FROM bhdata__Inventory__c];
+    }
+
+   /*@Auraenabled(cacheable=true)
+    public static List<string> getObjects() {
+        List<String> sObjectList = new List<String>();
+        
+        for (Schema.SObjectType objTyp: Schema.getGlobalDescribe().Values()) {
+            String name = objTyp.getDescribe().getName();
+            if((!name.containsignorecase('history') && !name.containsignorecase('tag')&&
+                !name.containsignorecase('share') && !name.containsignorecase('feed')) || 
+                name.toLowerCase().right(3) ==  '__c') { 
+                    System.debug('name ' + name);     
+                   sObjectList.add(name);
+            }
+        }
+        System.debug('sObjectList:'+sObjectList);
+        sObjectList.sort();
+        return sObjectList;
+    }*/
+
+    @Auraenabled(cacheable=true)
+    public static List<ObjectWrap> getObjects() {
+ 
+         Map<String, Schema.SObjectType> mapTypeObj = Schema.getGlobalDescribe();
+         System.debug('mapTypeObj ' + mapTypeObj);
+         List<ObjectWrap> objWrapList = new List<ObjectWrap>();
+         for (String objName: mapTypeObj.keySet()) {
+             ObjectWrap wrapMap = new ObjectWrap();
+             wrapMap.name = objName;
+             wrapMap.label = mapTypeObj.get(objName).getDescribe().getLabel();
+            if ((!objName.containsignorecase('history') && !objName.containsignorecase('tag')&&
+                !objName.containsignorecase('share') && !objName.containsignorecase('feed')) || 
+                objName.toLowerCase().right(3) ==  '__c') {           
+            objWrapList.add(wrapMap);
+            }
+        }
+        System.debug('objWrapList ' + objWrapList);
+        objWrapList.sort();
+        return objWrapList;
+    }
+   
+    @Auraenabled(cacheable=true)
+    public static List<FieldWrap> getFields(String objectName) {
+ 
+        Map<String, Schema.SObjectType> mapType = Schema.getGlobalDescribe();
+        System.debug('mapType ' + mapType );
+        Schema.SObjectType ctype = mapType.get(objectName);
+        Map<String, Schema.SobjectField> fieldMap = ctype.getDescribe().fields.getMap();  
+        List<FieldWrap> strList = new List<FieldWrap>();
+        for (String fieldName: fieldMap.keySet()) {
+            FieldWrap wrapMap = new FieldWrap();
+            wrapMap.name = fieldName;
+            wrapMap.label = fieldMap.get(fieldName).getDescribe().getLabel();        
+            strList.add(wrapMap);
+             
+        }
+        System.debug('strList ' + strList);
+        strList.sort();
+        return strList;
+    }
+
+    public class ObjectWrap implements Comparable {
+        @Auraenabled
+        public String Name {get;set;}
+        @Auraenabled
+        public String Label {get;set;}
+
+        public Integer compareTo(Object objToCompare) {
+	
+            return Label.compareTo(((ObjectWrap)objToCompare).Label);    
+	    }
+    }
+    
+    public class FieldWrap implements Comparable {
+        @Auraenabled
+        public String Name {get;set;}
+        @Auraenabled
+        public String Label {get;set;}
+
+	    public Integer compareTo(Object objToCompare) {
+	
+            return Label.compareTo(((FieldWrap)objToCompare).Label);    
+	    }
+    }
+
+    @AuraEnabled
+    public static bhdata__Inventory__c createInventory(bhdata__Inventory__c inv) {
+        system.debug('inv'+inv);
+        insert inv;
+        return inv;
+    }
+
+    @AuraEnabled
+    public static void deleteInventories(List<Id> listInventId){
+        try {
+            List<bhdata__Inventory__c> listInventToDelete = new list<bhdata__Inventory__c>();
+            System.debug('lstConIds ====> '+listInventToDelete);
+            for (Id idInvent: listInventId) {
+                listInventToDelete.add(new bhdata__Inventory__c(Id = idInvent));
+            }
+            if (!listInventToDelete.isEmpty()) {
+                delete listInventToDelete;
+            }
+        } catch(Exception ex) {
+            throw new AuraHandledException(ex.getMessage());
+        }
+    }
+    
+    /*@AuraEnabled
+    public static List<Map<String,String>> getPickListValues(String objApiName, String fieldName) {
+        
+        List<Map<String,String>> options = new List<Map<String,String>>();
+        Map<String,Schema.SObjectType> objGlobalMap = Schema.getGlobalDescribe();
+        Schema.SObjectType objType = Schema.getGlobalDescribe().get(objApiName);
+        if (objType == null) {
+        return options;
+        }
+        Schema.DescribeSObjectResult sobjectDescribe = objType.getDescribe();
+        Map < String, Schema.SObjectField > fieldMap = sobjectDescribe.fields.getMap();
+        if (fieldMap.get(fieldName) == null) {
+            return options;
+        }
+        List <Schema.PicklistEntry> pickListValues = fieldMap.get(fieldName).getDescribe().getPickListValues();
+        for (Schema.PicklistEntry f: pickListValues) {
+            Map <String,String> values = new Map <String,String> {
+                'label' => f.getLabel(),
+                'value' => f.getValue()
+            };
+            options.add(values);
+        }
+        return options;
+    }
+    @AuraEnabled
+    public static Map < Object, List < Map < String, String >>> getDependentOptions(String objApiName, String fieldName, String contrFieldApiName) {
+        return FieldUtilityClass.getFieldDependenciesMaps(objApiName, contrFieldApiName, fieldName);
+    }
+    @AuraEnabled
+    public static String getFieldLabel(String objName, String fieldName) {
+        return FieldUtilityClass.getFieldLabel(objName, fieldName);
+    }*/
+
+    
+}
+
+        /*Set<String> inlcudeInSosqlObjects = new Set<String>();
+        Set<String> activeNonSoslObjects = new Set<String>();
+        Set<String> activeOrInSoslObjects = new Set<String>();
+        String ObjectApiName;
+        Boolean inludedInSosl;
+        System.debug('test method debug'); 
+        List<Object_Inventory__mdt>  objInventoryList = [
+            SELECT Salesforce_Object__r.QualifiedApiName,
+                Include_in_SOSL__c,
+                Active__c
+            FROM Object_Inventory__mdt
+        ];
+        System.debug('objInventoryList ' + JSON.serialize(objInventoryList));
+
+        List<bhdata__RelationObject__c> relationObjList = [
+            SELECT Id, bhdata__Relationship_Name__c,
+                bhdata__Parent_Object__c,bhdata__Child_Object__c,bhdata__LookupField__c
+            FROM bhdata__RelationObject__c];
+        System.debug('relationObjList ' + relationObjList.size());
+
+        if (relationObjList.size() != 0) {
+            delete relationObjList;
+        }
+
+        List<bhdata__RelationObject__c> checkRelationObjList = [
+            SELECT bhdata__Relationship_Name__c,
+                bhdata__Parent_Object__c,bhdata__Child_Object__c,bhdata__LookupField__c
+            FROM bhdata__RelationObject__c
+        ];
+        
+        System.debug('checkRelationObjList ' + checkRelationObjList.size());
+
+        for (Object_Inventory__mdt inventoryItem :objInventoryList) {
+        
+            inludedInSosl = inventoryItem.Include_in_SOSL__c == true;
+            ObjectApiName = inventoryItem.Salesforce_Object__r.QualifiedApiName;
+
+            if (inludedInSosl == true) {
+                inlcudeInSosqlObjects.add(ObjectApiName);
+            }
+            if (inludedInSosl == false && inventoryItem.Active__c == true) {
+                activeNonSoslObjects.add(ObjectApiName);
+            }
+            if (inventoryItem.Active__c == true || inludedInSosl == true) {
+                activeOrInSoslObjects.add(ObjectApiName);
+            }
+            
+        }
+        
+        System.debug('inlcudeInSosqlObjects ' + inlcudeInSosqlObjects);
+        System.debug('activeNonSoslObjects ' + activeNonSoslObjects);
+        System.debug('activeOrInSoslObjects ' + activeOrInSoslObjects);
+
+        List<bhdata__RelationObject__c> relationObjectList = new List<bhdata__RelationObject__c>();
+        List<String> parentObjects = new List<String>(inlcudeInSosqlObjects);
+        System.debug('parentObjects ' + parentObjects);
+        List<Schema.ChildRelationship> aChildRelationshipList;
+        Set<String>checkParents = new Set<String>(); 
+        bhdata__RelationObject__c relationObject;
+        Boolean inInventory;
+        String childApiName;
+        String parentApiName;
+
+        for (Integer i = 0; i < parentObjects.size(); i++) {
+            parentApiName = parentObjects[i];
+            if (!checkParents.contains(parentApiName)) { 
+                checkParents.add(parentApiName);
+                aChildRelationshipList = Schema.getGlobalDescribe().get(parentApiName).getDescribe().getChildRelationships();
+                for (Schema.ChildRelationship relationship :aChildRelationshipList) {
+                    childApiName = String.valueOf(relationship.ChildSobject);
+                    inInventory = activeOrInSoslObjects.contains(childApiName);
+                    if (inInventory) {
+                        relationObject = new bhdata__RelationObject__c();
+                        relationObject.bhdata__Parent_Object__c = parentApiName;
+                        relationObject.bhdata__Child_Object__c = childApiName;
+                        relationObject.bhdata__LookupField__c = String.valueOf(relationship.field);
+                        relationObject.Name = parentApiName + '~' + childApiName;
+                        relationObjectList.add(relationObject); 
+                        parentObjects.add(childApiName); 
+                    }
+                }
+            }
+        }       
+        
+        insert relationObjectList;
+         
+        List<bhdata__RelationObject__c> existingObjList = [
+            SELECT Id, bhdata__Relationship_Name__c,
+                bhdata__Parent_Object__c,bhdata__Child_Object__c,bhdata__LookupField__c
+            FROM bhdata__RelationObject__c
+        ];
+         System.debug('relationObjList ' + existingObjList.size());   
+         
+        Map<String,List<String>> parentToChilds = new Map<String,List<String>>();
+        for (bhdata__RelationObject__c relationship :existingObjList) {
+            if (parentToChilds.containsKey(relationship.bhdata__Parent_Object__c)) {
+                parentToChilds.get(relationship.bhdata__Parent_Object__c).add(relationship.bhdata__Child_Object__c 
+                    + '~' + relationship.bhdata__LookupField__c);
+            } else {
+                parentToChilds.put(relationship.bhdata__Parent_Object__c, new List<String>{relationship.bhdata__Child_Object__c 
+                    + '~' + relationship.bhdata__LookupField__c});
+            }
+        }   
+        System.debug('parentToChilds ' + JSON.serialize(parentToChilds));
+    }
+
+}*/
