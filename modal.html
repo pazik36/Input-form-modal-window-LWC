@@ -1,0 +1,82 @@
+<template>
+    <div class="demo-only" style="height: 640px;">
+        <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-01" aria-modal="true" aria-describedby="modal-content-id-1" class="slds-modal slds-fade-in-open">
+            <div class="slds-modal__container">
+                <header class="slds-modal__header">
+                    <h2 id="modal-heading-01" class="slds-text-heading_medium slds-hyphenate">Create Inventory</h2>
+                </header>
+                <lightning-record-edit-form layout-type="Full" object-api-name="bhdata__Inventory__c" record-id={recordData.Id} onsuccess={handleSuccess}>
+                    <lightning-messages></lightning-messages>
+                    <div class="slds-modal__content slds-p-around_medium" id="modal-content-id-1">
+                        <center>
+                            <h1><b>FILL INFORMATION</b></h1>
+                        </center>
+                            <br/>
+                            <div class="slds-m-around_medium">
+                                <lightning-layout multiple-rows>
+                                    <lightning-layout-item size="6" padding="around-small">
+                                        <lightning-combobox 
+                                            variant="label-stacked"
+                                            name="bhdata__ObjectApiName__c" 
+                                            label="Object Api Name" 
+                                            placeholder="Select Object" 
+                                            options={objectApiNames} 
+                                            onchange={handleChangeObjectApiName} 
+                                            value={recordData.bhdata__ObjectApiName__c}
+                                            required>
+                                        </lightning-combobox>
+                                    </lightning-layout-item>
+                                    <lightning-layout-item size="6" padding="around-small">
+                                        <template if:true={recordData.bhdata__ObjectApiName__c}>
+                                            <lightning-combobox 
+                                                variant="label-stacked"
+                                                name="bhdata__RecordIdentifierApiName__c" 
+                                                label="Record Identifier" 
+                                                placeholder="Select Field" 
+                                                options={recordIdentifierApiNames} 
+                                                onchange={handleChangeRecordIdentifierApiNames} 
+                                                value={recordData.bhdata__RecordIdentifierApiName__c}
+                                                required>
+                                            </lightning-combobox>
+                                        </template>
+                                    </lightning-layout-item>
+                                    <lightning-layout-item size="3" padding="around-small">
+                                        <lightning-input-field 
+                                            value={recordData.bhdata__Include_in_SOSL__c}  
+                                            field-name="bhdata__Include_in_SOSL__c">
+                                        </lightning-input-field>
+                                    </lightning-layout-item>
+                                    <lightning-layout-item size="3" padding="around-small">
+                                        <lightning-input-field
+                                            value={recordData.bhdata__Active__c}
+                                            field-name="bhdata__Active__c"> 
+                                        </lightning-input-field>
+                                    </lightning-layout-item>
+                                    <div class="slds-hidden">
+                                        <lightning-input-field 
+                                            field-name='bhdata__ObjectApiName__c' 
+                                            value={recordData.bhdata__ObjectApiName__c}>
+                                        </lightning-input-field>
+                                        <lightning-input-field 
+                                            field-name='bhdata__RecordIdentifierApiName__c' 
+                                            value={recordData.bhdata__RecordIdentifierApiName__c}>
+                                        </lightning-input-field>
+                                        <lightning-input-field 
+                                            value={recordData.bhdata__Label__c} 
+                                            field-name='bhdata__Label__c'>
+                                        </lightning-input-field>
+                                    </div>
+                                </lightning-layout>
+                            </div>
+                        
+                    </div>
+                    <footer class="slds-modal__footer">
+                        <lightning-button class="slds-p-around_x-small" label="Cancel" onclick={handleClose}></lightning-button>
+                        <lightning-button class="slds-p-around_x-small" label={submitName} type="submit" variant="brand"></lightning-button>
+                    </footer>
+                </lightning-record-edit-form>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </div>
+</template>
